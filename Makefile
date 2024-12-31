@@ -1,5 +1,9 @@
 # Makefile for RAG application
 
+# Git hooks setup
+setup-hooks:
+	git config core.hooksPath .githooks
+
 # Variables
 IMAGE_NAME = rag-app
 CONTAINER_NAME = rag-container
@@ -8,10 +12,10 @@ DEFAULT_PORT = 8000
 # Default port can be overridden with PORT=xxxx
 PORT ?= $(DEFAULT_PORT)
 
-.PHONY: build stop run
+.PHONY: build stop run setup-hooks
 
 # Build the Docker image
-build:
+build: setup-hooks
 	docker build -t $(IMAGE_NAME) .
 
 # Stop running container
