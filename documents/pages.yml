@@ -1,0 +1,15 @@
+---
+
+- Page:
+    title: Home
+    link: /
+    description: |
+      This is the home page.
+      This is the landing page.
+
+- Page:
+    title: About
+    link: /about
+    description: |
+      This is the background page.
+      This is the purpose of this page.

@@ -1,0 +1,19 @@
+---
+
+- Product:
+    title: Peaceful Dreams
+    link: /peaceful-dreams
+    description: |
+      This a picture of a peaceful dreaming cat.
+
+- Product:
+    title: Playful Cat
+    link: /playful-cat
+    description: |
+      This a picture of a playful cat.
+
+- Product:
+    title: Curious Cat
+    link: /curious-cat
+    description: |
+      This a picture of a curious cat.
