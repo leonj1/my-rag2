@@ -1,7 +1,8 @@
 import pytest
 from pathlib import Path
 import numpy as np
-from typing import Dict, List
+import logging
+from typing import Dict, List, Any
 
 from app.services.document_processor import DocumentProcessor
 from app.services.embeddings import EmbeddingService
@@ -25,6 +26,14 @@ test_cases = [
     }
 ]
 
+# Print test data for debugging
+for case in test_cases:
+    logging.info(f"Test case: {case['name']}")
+    logging.info(f"Keywords: {case['expected_content_keywords']}")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
 class TestRAGPipeline:
     @pytest.fixture(scope="class")
     def document_processor(self):
@@ -41,14 +50,14 @@ class TestRAGPipeline:
         return store
     
     @pytest.fixture(scope="class")
-    def processed_chunks(self, document_processor) -> Dict[str, List[str]]:
+    def processed_chunks(self, document_processor) -> Dict[str, List[Dict[str, Any]]]:
         return document_processor.process_directory()
     
     @pytest.fixture(scope="class")
     def document_embeddings(self, embedding_service, processed_chunks) -> Dict[str, List[np.ndarray]]:
         embeddings = {}
-        for source, chunks in processed_chunks.items():
-            embeddings[source] = embedding_service.generate_embeddings(chunks)
+        for source, docs in processed_chunks.items():
+            embeddings[source] = embedding_service.generate_embeddings(docs)
         return embeddings
     
     @pytest.fixture(scope="class")
@@ -57,17 +66,21 @@ class TestRAGPipeline:
         return vector_store
 
     def test_document_processing(self, processed_chunks):
-        """Test that documents are properly processed into chunks."""
-        assert processed_chunks, "No chunks were generated"
+        """Test that documents are properly processed into structured data."""
+        assert processed_chunks, "No documents were generated"
         assert len(processed_chunks) > 0, "No documents were processed"
         
-        total_chunks = sum(len(chunks) for chunks in processed_chunks.values())
-        assert total_chunks > 0, "No chunks were generated from documents"
+        total_docs = sum(len(docs) for docs in processed_chunks.values())
+        assert total_docs > 0, "No documents were generated"
         
-        # Verify chunk content
-        for source, chunks in processed_chunks.items():
-            assert all(isinstance(chunk, str) for chunk in chunks), "All chunks should be strings"
-            assert all(len(chunk) > 0 for chunk in chunks), "No empty chunks should be present"
+        # Verify document structure
+        for source, docs in processed_chunks.items():
+            for doc in docs:
+                assert isinstance(doc, dict), "Each document should be a dictionary"
+                assert "type" in doc, "Document should have a type"
+                assert "data" in doc, "Document should have data"
+                assert all(key in doc["data"] for key in ["title", "description", "link"]), \
+                    "Document data should have title, description, and link"
 
     def test_embedding_generation(self, document_embeddings):
         """Test that embeddings are properly generated for chunks."""
@@ -99,14 +112,19 @@ class TestRAGPipeline:
         
         # Check content relevance
         for result in results:
-            assert isinstance(result["content"], str), "Result content should be a string"
             assert isinstance(result["score"], float), "Result score should be a float"
             assert 0 <= result["score"] <= 1, "Score should be between 0 and 1"
+            assert "type" in result, "Result should have a type"
+            assert "data" in result, "Result should have data"
             
             # Check if result contains expected keywords
-            content_lower = result["content"].lower()
-            assert any(keyword.lower() in content_lower for keyword in test_case["expected_content_keywords"]), \
-                f"Result should contain at least one of the keywords: {test_case['expected_content_keywords']}"
+            content_lower = f"{result['data']['title']} {result['data']['description']}".lower()
+            keywords = test_case["expected_content_keywords"]
+            logging.info(f"Checking content: {content_lower}")
+            logging.info(f"Against keywords: {keywords}")
+            found = any(k.lower() in content_lower for k in keywords)
+            assert found, \
+                f"Result '{content_lower}' should contain at least one of the keywords: {keywords}"
 
     def test_vector_store_operations(self, vector_store, processed_chunks, document_embeddings):
         """Test vector store operations."""
@@ -123,5 +141,7 @@ class TestRAGPipeline:
         assert isinstance(results, list), "Query results should be a list"
         assert len(results) > 0, "Should get at least one result"
         assert all(isinstance(r, dict) for r in results), "All results should be dictionaries"
-        assert all({"content", "source", "score"} <= r.keys() for r in results), \
-            "Results should have content, source, and score"
+        assert all({"source", "score", "type", "data"} <= r.keys() for r in results), \
+            "Results should have source, score, type, and data"
+        assert all({"title", "description", "link"} <= r["data"].keys() for r in results), \
+            "Result data should have title, description, and link"

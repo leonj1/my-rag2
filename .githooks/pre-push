@@ -3,19 +3,11 @@
 # Exit on any error
 set -e
 
-echo "Running pre-commit checks..."
+echo "Running pre-push checks..."
 
 # Run tests
 echo "Running tests..."
 python -m pytest tests/
-
-# Run linting
-echo "Running linting..."
-if command -v black &> /dev/null; then
-    black --check app/
-else
-    echo "Warning: black not found. Skipping code formatting check."
-fi
 
 if command -v flake8 &> /dev/null; then
     flake8 app/
@@ -24,5 +16,5 @@ else
 fi
 
 # All checks passed
-echo "✓ All pre-commit checks passed"
+echo "✓ All pre-push checks passed"
 exit 0

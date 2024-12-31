@@ -20,102 +20,93 @@ class DocumentProcessor:
             self.logger.error(f"Error reading YAML file {file_path}: {str(e)}")
             raise
 
-    def flatten_dict(self, d: Union[Dict[str, Any], List[Any]], parent_key: str = '') -> List[str]:
-        """Flatten a nested dictionary or list into a list of strings."""
-        texts = []
-        
-        if isinstance(d, list):
-            # For top-level list, process each item
-            for item in d:
-                if isinstance(item, dict) and 'Product' in item:
-                    product = item['Product']
-                    # Create a meaningful text representation of the product
-                    product_text = f"Title: {product.get('title', '')}\n"
-                    product_text += f"Description: {product.get('description', '').strip()}\n"
-                    product_text += f"Link: {product.get('link', '')}"
-                    texts.append(product_text)
-        elif isinstance(d, dict):
-            # For nested dictionaries
-            for key, value in d.items():
-                if isinstance(value, dict):
-                    texts.extend(self.flatten_dict(value))
-                elif isinstance(value, list):
-                    texts.extend(self.flatten_dict(value))
-                else:
-                    texts.append(f"{key}: {str(value)}")
-        
-        return texts
+    def get_document_type(self, file_path: Path) -> str:
+        """Determine document type from filename."""
+        filename = file_path.stem.lower()
+        if 'product' in filename:
+            return 'product'
+        elif 'page' in filename:
+            return 'page'
+        else:
+            raise ValueError(f"Unknown document type for file: {file_path}")
 
-    def create_chunks(self, text: str) -> List[str]:
-        """Split text into overlapping chunks."""
-        if len(text) <= self.chunk_size:
-            return [text]
-
-        chunks = []
-        start = 0
-        while start < len(text):
-            end = start + self.chunk_size
-            chunk = text[start:end]
+    def process_yaml_content(self, content: Dict[str, Any], doc_type: str) -> List[Dict[str, Any]]:
+        """Process YAML content into structured documents."""
+        documents = []
+        
+        if not isinstance(content, list):
+            self.logger.warning("YAML content is not a list of documents")
+            return documents
             
-            # If not at the end, try to break at a newline
-            if end < len(text):
-                last_newline = chunk.rfind('\n')
-                if last_newline != -1:
-                    end = start + last_newline + 1
-                    chunk = text[start:end]
-            
-            chunks.append(chunk)
-            start = end - self.chunk_overlap
-
-        return chunks
-
-    def process_document(self, file_path: Path) -> List[str]:
-        """Process a single document into chunks."""
-        yaml_content = self.read_yaml_file(file_path)
-        if not yaml_content:  # Handle empty files
-            self.logger.warning(f"Empty or invalid YAML content in {file_path}")
-            return []
-            
-        flattened_texts = self.flatten_dict(yaml_content)
-        
-        # Filter out empty strings
-        filtered_texts = [text for text in flattened_texts if text.strip()]
-        if not filtered_texts:  # Handle case where no valid text was extracted
-            self.logger.warning(f"No valid text content extracted from {file_path}")
-            return []
-        
-        # Each text block becomes its own chunk
-        chunks = []
-        for text in filtered_texts:
-            # Only create sub-chunks if text exceeds chunk size
-            if len(text) > self.chunk_size:
-                chunks.extend(self.create_chunks(text))
+        for item in content:
+            doc = None
+            if doc_type == 'product' and 'Product' in item:
+                doc = item['Product']
+            elif doc_type == 'page' and 'Page' in item:
+                doc = item['Page']
+                
+            if doc:
+                # Clean and normalize text fields
+                title = doc.get('title', '').strip()
+                description = doc.get('description', '').strip()
+                # Replace newlines with spaces in description
+                description = ' '.join(description.split())
+                
+                documents.append({
+                    'type': doc_type,
+                    'data': {
+                        'title': title,
+                        'description': description,
+                        'link': doc.get('link', '')
+                    }
+                })
+                self.logger.info(f"Processed {doc_type} document: {title}")
             else:
-                chunks.append(text)
+                self.logger.warning(f"Skipping invalid document: {item}")
         
-        # Log for debugging
-        self.logger.info(f"Processed document {file_path} into {len(chunks)} chunks")
-        for i, chunk in enumerate(chunks):
-            self.logger.info(f"Chunk {i}: {chunk[:100]}...")
-        
-        return chunks
+        return documents
 
-    def process_directory(self, directory: Path = Path(settings.DOCUMENTS_DIR)) -> Dict[str, List[str]]:
+    def process_document(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Process a single document into structured data."""
+        try:
+            yaml_content = self.read_yaml_file(file_path)
+            if not yaml_content:
+                self.logger.warning(f"Empty or invalid YAML content in {file_path}")
+                return []
+                
+            doc_type = self.get_document_type(file_path)
+            documents = self.process_yaml_content(yaml_content, doc_type)
+            
+            if not documents:
+                self.logger.warning(f"No valid documents extracted from {file_path}")
+                return []
+            
+            self.logger.info(f"Processed {file_path} into {len(documents)} documents")
+            return documents
+        except Exception as e:
+            self.logger.error(f"Error processing document {file_path}: {str(e)}")
+            raise
+
+    def process_directory(self, directory: Path = Path(settings.DOCUMENTS_DIR)) -> Dict[str, List[Dict[str, Any]]]:
         """Process all YAML files in a directory."""
-        document_chunks = {}
+        processed_documents = {}
         
         try:
             yaml_files = list(directory.glob('*.yml'))
-            for file_path in yaml_files:
-                self.logger.info(f"Processing {file_path}")
-                chunks = self.process_document(file_path)
-                if chunks:  # Only include documents that produced valid chunks
-                    document_chunks[str(file_path)] = chunks
+            self.logger.info(f"Found YAML files: {yaml_files}")
             
-            if not document_chunks:
+            # Process products.yml first to ensure cat-related documents are included
+            for file_path in sorted(yaml_files, key=lambda x: x.name != 'products.yml'):
+                self.logger.info(f"Processing {file_path}")
+                documents = self.process_document(file_path)
+                if documents:
+                    processed_documents[str(file_path)] = documents
+                    self.logger.info(f"Added {len(documents)} documents from {file_path}")
+            
+            if not processed_documents:
                 self.logger.warning("No valid documents were processed")
                 
-            return document_chunks
+            return processed_documents
         except Exception as e:
             self.logger.error(f"Error processing directory {directory}: {str(e)}")
             raise

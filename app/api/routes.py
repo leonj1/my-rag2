@@ -3,7 +3,8 @@ from pathlib import Path
 import logging
 from typing import Dict, List
 
-from app.models.schemas import QueryRequest, QueryResponse, ProcessingStatus
+from app.models.schemas import QueryRequest, QueryResponse, ProcessingStatus, SearchResult
+from app.models.documents import Product, Page
 from app.services.document_processor import DocumentProcessor
 from app.services.embeddings import EmbeddingService
 from app.services.vector_store import VectorStore
@@ -27,10 +28,10 @@ async def process_documents():
         if not chunks:
             raise HTTPException(status_code=404, detail="No documents found in the documents directory")
         
-        # Generate embeddings for each document's chunks
+        # Generate embeddings for each document
         embeddings = {}
-        for source, source_chunks in chunks.items():
-            embeddings[source] = embedding_service.generate_embeddings(source_chunks)
+        for source, documents in chunks.items():
+            embeddings[source] = embedding_service.generate_embeddings(documents)
         
         # Reset vector store and add new documents
         vector_store.reset()
@@ -61,10 +62,29 @@ async def query_documents(request: QueryRequest):
             limit=request.limit or settings.MAX_RESULTS
         )
         
+        # Convert results to appropriate model types
+        formatted_results = []
+        for result in results:
+            model_data = result["data"]
+            if result["type"] == "product":
+                document = Product(**model_data)
+            elif result["type"] == "page":
+                document = Page(**model_data)
+            else:
+                continue
+
+            formatted_results.append(
+                SearchResult(
+                    source=result["source"],
+                    score=result["score"],
+                    document=document
+                )
+            )
+
         return QueryResponse(
             query=request.query,
-            results=results,
-            total_chunks=len(results)
+            results=formatted_results,
+            total_results=len(formatted_results)
         )
         
     except Exception as e:

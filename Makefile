@@ -12,7 +12,21 @@ DEFAULT_PORT = 8000
 # Default port can be overridden with PORT=xxxx
 PORT ?= $(DEFAULT_PORT)
 
-.PHONY: build stop run setup-hooks
+.PHONY: build stop run setup-hooks test setup
+
+# Setup development environment
+setup:
+	pip install -U tokenizers transformers
+	pip install -r requirements.txt
+	pip install pytest pytest-cov
+
+# Run linting
+lint:
+	black .
+
+# Run unit tests
+test:
+	python -m pytest tests/ -v --cov=app --cov-report=term-missing
 
 # Build the Docker image
 build: setup-hooks

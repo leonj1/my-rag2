@@ -1,0 +1,11 @@
+from pydantic import BaseModel
+
+class Product(BaseModel):
+    title: str
+    link: str
+    description: str
+
+class Page(BaseModel):
+    title: str
+    link: str
+    description: str
