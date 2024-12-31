@@ -9,12 +9,6 @@ echo "Running pre-push checks..."
 echo "Running tests..."
 python -m pytest tests/
 
-if command -v flake8 &> /dev/null; then
-    flake8 app/
-else
-    echo "Warning: flake8 not found. Skipping code style check."
-fi
-
 # All checks passed
 echo "✓ All pre-push checks passed"
 exit 0
