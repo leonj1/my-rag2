@@ -1,6 +1,6 @@
 import yaml
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 import logging
 from app.core.config import settings
 
@@ -20,22 +20,29 @@ class DocumentProcessor:
             self.logger.error(f"Error reading YAML file {file_path}: {str(e)}")
             raise
 
-    def flatten_dict(self, d: Dict[str, Any], parent_key: str = '') -> List[str]:
-        """Flatten a nested dictionary into a list of strings."""
+    def flatten_dict(self, d: Union[Dict[str, Any], List[Any]], parent_key: str = '') -> List[str]:
+        """Flatten a nested dictionary or list into a list of strings."""
         texts = []
-        for key, value in d.items():
-            new_key = f"{parent_key}.{key}" if parent_key else key
-            
-            if isinstance(value, dict):
-                texts.extend(self.flatten_dict(value, new_key))
-            elif isinstance(value, list):
-                for i, item in enumerate(value):
-                    if isinstance(item, dict):
-                        texts.extend(self.flatten_dict(item, f"{new_key}[{i}]"))
-                    else:
-                        texts.append(f"{new_key}[{i}]: {str(item)}")
-            else:
-                texts.append(f"{new_key}: {str(value)}")
+        
+        if isinstance(d, list):
+            # For top-level list, process each item
+            for item in d:
+                if isinstance(item, dict) and 'Product' in item:
+                    product = item['Product']
+                    # Create a meaningful text representation of the product
+                    product_text = f"Title: {product.get('title', '')}\n"
+                    product_text += f"Description: {product.get('description', '').strip()}\n"
+                    product_text += f"Link: {product.get('link', '')}"
+                    texts.append(product_text)
+        elif isinstance(d, dict):
+            # For nested dictionaries
+            for key, value in d.items():
+                if isinstance(value, dict):
+                    texts.extend(self.flatten_dict(value))
+                elif isinstance(value, list):
+                    texts.extend(self.flatten_dict(value))
+                else:
+                    texts.append(f"{key}: {str(value)}")
         
         return texts
 
@@ -65,12 +72,33 @@ class DocumentProcessor:
     def process_document(self, file_path: Path) -> List[str]:
         """Process a single document into chunks."""
         yaml_content = self.read_yaml_file(file_path)
-        flattened_text = self.flatten_dict(yaml_content)
+        if not yaml_content:  # Handle empty files
+            self.logger.warning(f"Empty or invalid YAML content in {file_path}")
+            return []
+            
+        flattened_texts = self.flatten_dict(yaml_content)
         
-        # Join flattened text with newlines
-        full_text = '\n'.join(flattened_text)
+        # Filter out empty strings
+        filtered_texts = [text for text in flattened_texts if text.strip()]
+        if not filtered_texts:  # Handle case where no valid text was extracted
+            self.logger.warning(f"No valid text content extracted from {file_path}")
+            return []
         
-        return self.create_chunks(full_text)
+        # Each text block becomes its own chunk
+        chunks = []
+        for text in filtered_texts:
+            # Only create sub-chunks if text exceeds chunk size
+            if len(text) > self.chunk_size:
+                chunks.extend(self.create_chunks(text))
+            else:
+                chunks.append(text)
+        
+        # Log for debugging
+        self.logger.info(f"Processed document {file_path} into {len(chunks)} chunks")
+        for i, chunk in enumerate(chunks):
+            self.logger.info(f"Chunk {i}: {chunk[:100]}...")
+        
+        return chunks
 
     def process_directory(self, directory: Path = Path(settings.DOCUMENTS_DIR)) -> Dict[str, List[str]]:
         """Process all YAML files in a directory."""
@@ -80,7 +108,12 @@ class DocumentProcessor:
             yaml_files = list(directory.glob('*.yml'))
             for file_path in yaml_files:
                 self.logger.info(f"Processing {file_path}")
-                document_chunks[str(file_path)] = self.process_document(file_path)
+                chunks = self.process_document(file_path)
+                if chunks:  # Only include documents that produced valid chunks
+                    document_chunks[str(file_path)] = chunks
+            
+            if not document_chunks:
+                self.logger.warning("No valid documents were processed")
                 
             return document_chunks
         except Exception as e:

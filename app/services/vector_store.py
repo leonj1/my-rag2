@@ -73,7 +73,11 @@ class VectorStore:
     def reset(self) -> None:
         """Reset the vector store by deleting all documents."""
         try:
-            self.collection.delete(where={})
+            # Get all document IDs
+            result = self.collection.get()
+            if result and result['ids']:
+                # Delete all documents by their IDs
+                self.collection.delete(ids=result['ids'])
             self.logger.info("Reset vector store")
         except Exception as e:
             self.logger.error(f"Error resetting vector store: {str(e)}")
