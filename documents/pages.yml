@@ -2,14 +2,34 @@
 
 - Page:
     title: Home
-    link: /
+    link: /index.html
     description: |
       This is the home page.
       This is the landing page.
 
 - Page:
     title: About
-    link: /about
+    link: /about.html
     description: |
       This is the background page.
-      This is the purpose of this page.
+      This is the purpose of this site.
+
+- Page:
+    title: Home
+    link: /index.html#featured
+    description: |
+      The featured items on the site.
+
+- Page:
+    title: Home
+    link: /index.html#pricing
+    description: |
+      The prices of the products on the site.
+      High resolution images.
+      Personal use license.
+
+- Page:
+    title: Home
+    link: /index.html#contact
+    description: |
+      How to contact the company.

@@ -7,10 +7,11 @@ class Product(BaseModel):
     title: str
     description: str
     link: str
+    type: str = "product"
 
 
 class Page(BaseModel):
     """Page document model."""
-    title: str
     description: str
     link: str
+    type: str = "page"
