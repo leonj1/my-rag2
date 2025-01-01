@@ -7,7 +7,7 @@ setup-hooks:
 # Variables
 IMAGE_NAME = rag-app
 CONTAINER_NAME = rag-container
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 7500
 
 # Default port can be overridden with PORT=xxxx
 PORT ?= $(DEFAULT_PORT)
